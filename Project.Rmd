@@ -1,0 +1,124 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r eval=FALSE}
+install.packages("corrplot")
+
+```
+
+```{r}
+require(corrplot)
+```
+
+Initial checks on correlation and variable finalizations
+```{r}
+#Loading Data
+Train <- read.csv("train.csv")
+
+#Getting a subset of required variables 
+Final_Variables <- c("TotalBsmtSF","GrLivArea","FullBath","GarageArea","Neighborhood","OverallQual","SalePrice")
+#Getting a dataset with required variables
+Train_Req <- Train[,Final_Variables]
+rm(Train)
+
+#Creating a vector(array) of datatypes of the columns
+#Check this to see if any variables need to be changed to a different datatype
+#If some variable is to be parsed to a factor and such
+Train_Req$OverallQual <- as.factor(Train_Req$OverallQual)
+factor_type <- sapply(X = Train_Req,FUN = class)
+factor_type
+
+#Modifying some of the column datatypes to requirement
+#Creating datasets with Interval and Nominal dattypes
+Interval_types <- Train_Req[,factor_type=="integer"]
+Nominal_types <- Train_Req[,factor_type=="factor"]
+
+correlation <- cor(Interval_types)
+corrplot(correlation)
+
+anova_var <- function(x){
+  NA_mask <- is.na(x)
+  x <- na.omit(x)
+  ano <- aov(Interval_types[,"SalePrice"]~x)
+  summary(ano)
+  (anova(ano)[["Sum Sq"]][1])/((anova(ano)[["Sum Sq"]][1])+(anova(ano)[["Sum Sq"]][2]))
+}
+
+anova_var_2 <- function(x){
+  NA_mask <- is.na(x)
+  x <- x[-NA_mask]
+  ano <- aov(Interval_types[-NA_mask,"SalePrice"]~x)
+  summary(ano)
+  (anova(ano)[["Sum Sq"]][1])/((anova(ano)[["Sum Sq"]][1])+(anova(ano)[["Sum Sq"]][2]))
+}
+anova_var(Nominal_types[,"OverallQual"])
+```
+
+Descriptive Analysis and Outlier handling
+```{r}
+Data_Final <- Train_Req[,Final_Variables]
+
+attach(Data_Final)
+
+hist(SalePrice)
+avg_SalePrice <- mean(SalePrice)
+sd_SalePrice <- sd(SalePrice)
+Outlier_cutoff_max <- avg_SalePrice+(2*sd_SalePrice)
+Outlier_cutoff_min <- avg_SalePrice-(2*sd_SalePrice)
+
+detach(Data_Final)
+```
+
+Model creation and finalizing one
+```{r}
+Data_Final <- Data_Final[Data_Final$SalePrice<Outlier_cutoff_max,]
+attach(Data_Final)
+
+linefit <- lm(SalePrice ~ TotalBsmtSF+GrLivArea+FullBath+GarageArea+Neighborhood+OverallQual)
+linefit1 <- lm(SalePrice ~ TotalBsmtSF+GrLivArea+GarageArea+Neighborhood+OverallQual)
+linefit2 <- lm(SalePrice ~ TotalBsmtSF+GrLivArea+GarageArea+OverallQual)
+linefit3 <- lm(SalePrice ~ GrLivArea+GarageArea+OverallQual)
+linefit4 <- lm(SalePrice ~ GrLivArea+OverallQual)
+summary(linefit2)
+Anova_model <- aov(SalePrice~OverallQual)
+
+detach(Data_Final)
+```
+
+Checking Assumptions made on hypothesis 
+```{r}
+attach(Data_Final)
+# multi predictor model-assumption checking
+# standardized residual plot-on fitted values
+linefit2.stres <- rstandard(linefit2)
+plot(linefit2$fitted.values, linefit2.stres, pch = 16, main = "Standardized Re
+     sidual Plot", xlab = "Fitted Sales Price", ylab = "Standardized Residuals")
+abline(0,0, lty=2, col="red")
+
+# histogram with normal curve
+h <- hist(linefit2.stres)
+x <- linefit2.stres
+xfit <- seq(min(x), max(x), length = 50)
+yfit <- dnorm(xfit, mean = mean(x), sd = sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="blue")
+
+# normal probability plot
+qqnorm(linefit2.stres, main = "Normal Probability Plot", xlab = "Normal Scores
+       ", ylab = "Standardized Residuals")
+qqline(linefit2.stres, col = "red")
+shapiro.test(linefit2.stres)
+
+
+# individual scatter plots against Y (Sales)
+plot(TotalBsmtSF,SalePrice, pch = 16, xlab = "Basement", ylab = "SalePrice")
+abline(lm(SalePrice ~TotalBsmtSF), lty=2, col="red")
+
+# individual scatter plots against St Resids
+# standardized residual plot-on fat
+plot(TotalBsmtSF, linefit2.stres, pch = 16, main = "Standardized Residual Plot", xlab = "Basement", ylab = "Standardized Residuals")
+abline(0,0, lty=2, col="blue")
+detach(Data_Final)
+```
